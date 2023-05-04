@@ -18,7 +18,6 @@ package eventsocket
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -47,7 +46,7 @@ type Connection struct {
 	reader        *bufio.Reader
 	textreader    *textproto.Reader
 	errEv, errReq chan error
-	cmd, api, evt chan *Event
+	cmd, api, evt chan []string
 }
 
 // newConnection allocates a new Connection and initialize its buffers.
@@ -57,9 +56,9 @@ func newConnection(c net.Conn) *Connection {
 		reader: bufio.NewReaderSize(c, bufferSize),
 		errEv:  make(chan error, 1),
 		errReq: make(chan error, 1),
-		cmd:    make(chan *Event),
-		api:    make(chan *Event),
-		evt:    make(chan *Event, eventsBuffer),
+		cmd:    make(chan []string),
+		api:    make(chan []string),
+		evt:    make(chan []string, eventsBuffer),
 	}
 	h.textreader = textproto.NewReader(h.reader)
 	return &h
@@ -161,20 +160,19 @@ func (h *Connection) readOne() bool {
 		hdr    textproto.MIMEHeader
 	)
 
-	resp := new(Event)
+	resp := make([]string, FsEventMapSize)
 	hdr, err = h.textreader.ReadMIMEHeader()
 	if err != nil {
 		h.errEv <- err
 		return false
 	}
 
-	resp.Header = make(EventHeader)
 	if v := hdr.Get("Content-Length"); v != "" {
 		length, err = strconv.Atoi(v)
 		if err == nil {
 			b := make([]byte, length)
 			if _, err = io.ReadFull(h.reader, b); err == nil {
-				resp.Body = string(b)
+				resp[EventMsgBody] = string(b)
 			}
 		}
 	}
@@ -201,8 +199,8 @@ func (h *Connection) readOne() bool {
 			h.errReq <- err
 			return false
 		}
-		if len(resp.Body) > 1 && string(resp.Body[:2]) == "-E" {
-			h.errReq <- errors.New(string(resp.Body)[5:])
+		if len(resp[EventMsgBody]) > 1 && string(resp[EventMsgBody][:2]) == "-E" {
+			h.errReq <- errors.New(string(resp[EventMsgBody])[5:])
 			return true
 		}
 		copyHeaders(&hdr, resp, false)
@@ -212,8 +210,8 @@ func (h *Connection) readOne() bool {
 			h.errEv <- err
 			return false
 		}
-		reader := bufio.NewReader(bytes.NewReader([]byte(resp.Body)))
-		resp.Body = ""
+		reader := bufio.NewReader(bytes.NewReader([]byte(resp[EventMsgBody])))
+		resp[EventMsgBody] = ""
 		textreader := textproto.NewReader(reader)
 		hdr, err = textreader.ReadMIMEHeader()
 		if err != nil {
@@ -231,32 +229,33 @@ func (h *Connection) readOne() bool {
 				h.errEv <- err
 				return false
 			}
-			resp.Body = string(b)
+			resp[EventMsgBody] = string(b)
 		}
 		copyHeaders(&hdr, resp, true)
 		h.evt <- resp
 	case "text/event-json":
-		if err != nil {
-			h.errEv <- err
-			return false
-		}
-		tmp := make(EventHeader)
-		err := json.Unmarshal([]byte(resp.Body), &tmp)
-		if err != nil {
-			h.errEv <- err
-			return false
-		}
-		// capitalize header keys for consistency.
-		for k, v := range tmp {
-			resp.Header[capitalize(k)] = v
-		}
-		if v, _ := resp.Header["_body"]; v != nil {
-			resp.Body = v.(string)
-			delete(resp.Header, "_body")
-		} else {
-			resp.Body = ""
-		}
-		h.evt <- resp
+		h.errEv <- errors.New("text/event-json: unsupported ")
+		// if err != nil {
+		// 	h.errEv <- err
+		// 	return false
+		// }
+		// tmp := make(EventHeader)
+		// err := json.Unmarshal([]byte(resp.Body), &tmp)
+		// if err != nil {
+		// 	h.errEv <- err
+		// 	return false
+		// }
+		// // capitalize header keys for consistency.
+		// for k, v := range tmp {
+		// 	resp.Header[capitalize(k)] = v
+		// }
+		// if v, _ := resp.Header["_body"]; v != nil {
+		// 	resp.Body = v.(string)
+		// 	delete(resp.Header, "_body")
+		// } else {
+		// 	resp.Body = ""
+		// }
+		// h.evt <- resp
 	case "text/disconnect-notice":
 		if err != nil {
 			h.errEv <- err
@@ -286,9 +285,9 @@ func (h *Connection) Close() {
 // When subscribing to events (e.g. `Send("events json ALL")`) it makes no
 // difference to use plain or json. ReadEvent will parse them and return
 // all headers and the body (if any) in an Event struct.
-func (h *Connection) ReadEvent() (*Event, error) {
+func (h *Connection) ReadEvent() ([]string, error) {
 	var (
-		ev  *Event
+		ev  []string
 		err error
 	)
 	select {
@@ -304,17 +303,17 @@ func (h *Connection) ReadEvent() (*Event, error) {
 // unescaping them when decode is set to true.
 //
 // It's used after parsing plain text event headers, but not JSON.
-func copyHeaders(src *textproto.MIMEHeader, dst *Event, decode bool) {
+func copyHeaders(src *textproto.MIMEHeader, dst []string, decode bool) {
 	var err error
 	for k, v := range *src {
 		k = capitalize(k)
-		if decode {
-			dst.Header[k], err = url.QueryUnescape(v[0])
+		if decode && MapKeyIndex[k] != 0 {
+			dst[MapKeyIndex[k]], err = url.QueryUnescape(v[0])
 			if err != nil {
-				dst.Header[k] = v[0]
+				dst[MapKeyIndex[k]] = v[0]
 			}
 		} else {
-			dst.Header[k] = v[0]
+			dst[MapKeyIndex[k]] = v[0]
 		}
 	}
 }
@@ -350,14 +349,14 @@ func capitalize(s string) string {
 //
 // See http://wiki.freeswitch.org/wiki/Event_Socket#Command_Documentation for
 // details.
-func (h *Connection) Send(command string) (*Event, error) {
+func (h *Connection) Send(command string) ([]string, error) {
 	// Sanity check to avoid breaking the parser
 	//if strings.IndexAny(command, "\r\n") > 0 {
 	//	return nil, errInvalidCommand
 	//}
 	fmt.Fprintf(h.conn, "%s\r\n\r\n", command)
 	var (
-		ev  *Event
+		ev  []string
 		err error
 	)
 	select {
@@ -398,7 +397,7 @@ type MSG map[string]string
 // If appData is set, a "content-length" header is expected (lower case!).
 //
 // See http://wiki.freeswitch.org/wiki/Event_Socket#sendmsg for details.
-func (h *Connection) SendMsg(m MSG, uuid, appData string) (*Event, error) {
+func (h *Connection) SendMsg(m MSG, uuid, appData string) ([]string, error) {
 	b := bytes.NewBufferString("sendmsg")
 	if uuid != "" {
 		// Make sure there's no \r or \n in the UUID.
@@ -428,7 +427,7 @@ func (h *Connection) SendMsg(m MSG, uuid, appData string) (*Event, error) {
 		return nil, err
 	}
 	var (
-		ev  *Event
+		ev  []string
 		err error
 	)
 	select {
@@ -449,7 +448,7 @@ func (h *Connection) SendMsg(m MSG, uuid, appData string) (*Event, error) {
 //	Execute("playback", "/tmp/test.wav", false)
 //
 // See http://wiki.freeswitch.org/wiki/Event_Socket#execute for details.
-func (h *Connection) Execute(appName, appArg string, lock bool) (*Event, error) {
+func (h *Connection) Execute(appName, appArg string, lock bool) ([]string, error) {
 	var evlock string
 	if lock {
 		// Could be strconv.FormatBool(lock), but we don't want to
@@ -466,7 +465,7 @@ func (h *Connection) Execute(appName, appArg string, lock bool) (*Event, error) 
 
 // ExecuteUUID is similar to Execute, but takes a UUID and no lock. Suitable
 // for use on inbound event socket connections (acting as client).
-func (h *Connection) ExecuteUUID(uuid, appName, appArg, appUUID string) (*Event, error) {
+func (h *Connection) ExecuteUUID(uuid, appName, appArg, appUUID string) ([]string, error) {
 	return h.SendMsg(MSG{
 		"call-command":     "execute",
 		"execute-app-name": appName,
