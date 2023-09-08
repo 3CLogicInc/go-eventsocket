@@ -312,7 +312,7 @@ func copyHeaders(src *textproto.MIMEHeader, dst []string, decode bool) {
 			if err != nil {
 				dst[MapKeyIndex[k]] = v[0]
 			}
-		} else {
+		} else if MapKeyIndex[k] != 0 {
 			dst[MapKeyIndex[k]] = v[0]
 		}
 	}
