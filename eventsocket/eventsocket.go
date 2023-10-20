@@ -86,7 +86,6 @@ type HandleFunc func(*Connection)
 //			...
 //		}
 //	}
-//
 func ListenAndServe(addr string, fn HandleFunc) error {
 	srv, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -114,7 +113,6 @@ func ListenAndServe(addr string, fn HandleFunc) error {
 //		ev.PrettyPrint()
 //		...
 //	}
-//
 func Dial(addr, passwd string) (*Connection, error) {
 	c, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -233,29 +231,29 @@ func (h *Connection) readOne() bool {
 		}
 		copyHeaders(&hdr, resp, true)
 		h.evt <- resp
-	case "text/event-json":
-		h.errEv <- errors.New("text/event-json: unsupported ")
-		// if err != nil {
-		// 	h.errEv <- err
-		// 	return false
-		// }
-		// tmp := make(EventHeader)
-		// err := json.Unmarshal([]byte(resp.Body), &tmp)
-		// if err != nil {
-		// 	h.errEv <- err
-		// 	return false
-		// }
-		// // capitalize header keys for consistency.
-		// for k, v := range tmp {
-		// 	resp.Header[capitalize(k)] = v
-		// }
-		// if v, _ := resp.Header["_body"]; v != nil {
-		// 	resp.Body = v.(string)
-		// 	delete(resp.Header, "_body")
-		// } else {
-		// 	resp.Body = ""
-		// }
-		// h.evt <- resp
+	// case "text/event-json":
+	// 	h.errEv <- errors.New("text/event-json: unsupported ")
+	// 	if err != nil {
+	// 		h.errEv <- err
+	// 		return false
+	// 	}
+	// 	tmp := make(EventHeader)
+	// 	err := json.Unmarshal([]byte(resp.Body), &tmp)
+	// 	if err != nil {
+	// 		h.errEv <- err
+	// 		return false
+	// 	}
+	// 	// capitalize header keys for consistency.
+	// 	for k, v := range tmp {
+	// 		resp.Header[capitalize(k)] = v
+	// 	}
+	// 	if v, _ := resp.Header["_body"]; v != nil {
+	// 		resp.Body = v.(string)
+	// 		delete(resp.Header, "_body")
+	// 	} else {
+	// 		resp.Body = ""
+	// 	}
+	// 	h.evt <- resp
 	case "text/disconnect-notice":
 		if err != nil {
 			h.errEv <- err
@@ -264,6 +262,7 @@ func (h *Connection) readOne() bool {
 		copyHeaders(&hdr, resp, false)
 		h.evt <- resp
 	default:
+		h.errEv <- errors.New("unsupported event")
 		log.Fatal("Unsupported event:", hdr)
 	}
 	return true
