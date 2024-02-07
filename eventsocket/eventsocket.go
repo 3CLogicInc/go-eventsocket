@@ -294,6 +294,8 @@ func (h *Connection) ReadEvent() ([]string, error) {
 		return nil, err
 	case ev = <-h.evt:
 		return ev, nil
+	case <-time.After(10 * time.Second):
+		return nil, errors.New("ReadEvent timeout!")
 	}
 }
 
@@ -362,8 +364,10 @@ func (h *Connection) Send(command string) ([]string, error) {
 	case err = <-h.errReq:
 		return nil, err
 	case ev = <-h.cmd:
+		fmt.Println("Send: rcvd event from cmd channel")
 		return ev, nil
 	case ev = <-h.api:
+		fmt.Println("Send: rcvd event from api channel")
 		return ev, nil
 	case <-time.After(timeoutPeriod):
 		return nil, errTimeout
@@ -433,6 +437,10 @@ func (h *Connection) SendMsg(m MSG, uuid, appData string) ([]string, error) {
 	case err = <-h.errReq:
 		return nil, err
 	case ev = <-h.cmd:
+		fmt.Println("SendMsg: rcvd event from cmd channel")
+		return ev, nil
+	case ev = <-h.api:
+		fmt.Println("SendMsg: rcvd event from api channel")
 		return ev, nil
 	case <-time.After(timeoutPeriod):
 		return nil, errTimeout
