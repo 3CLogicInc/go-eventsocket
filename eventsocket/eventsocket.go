@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/textproto"
 	"net/url"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -294,8 +295,6 @@ func (h *Connection) ReadEvent() ([]string, error) {
 		return nil, err
 	case ev = <-h.evt:
 		return ev, nil
-	case <-time.After(10 * time.Second):
-		return nil, errors.New("ReadEvent timeout!")
 	}
 }
 
@@ -370,6 +369,9 @@ func (h *Connection) Send(command string) ([]string, error) {
 		fmt.Println("Send: rcvd event from api channel")
 		return ev, nil
 	case <-time.After(timeoutPeriod):
+		buf := make([]byte, 1<<20)
+		runtime.Stack(buf, true)
+		fmt.Println("", "Send - runtime stack: ", buf)
 		return nil, errTimeout
 	}
 }
@@ -443,6 +445,9 @@ func (h *Connection) SendMsg(m MSG, uuid, appData string) ([]string, error) {
 		fmt.Println("SendMsg: rcvd event from api channel")
 		return ev, nil
 	case <-time.After(timeoutPeriod):
+		buf := make([]byte, 1<<20)
+		runtime.Stack(buf, true)
+		fmt.Println("", "SendMsg - runtime stack: ", buf)
 		return nil, errTimeout
 	}
 }
