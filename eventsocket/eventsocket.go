@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/textproto"
 	"net/url"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -362,10 +363,15 @@ func (h *Connection) Send(command string) ([]string, error) {
 	case err = <-h.errReq:
 		return nil, err
 	case ev = <-h.cmd:
+		fmt.Println("Send: rcvd event from cmd channel")
 		return ev, nil
 	case ev = <-h.api:
+		fmt.Println("Send: rcvd event from api channel")
 		return ev, nil
 	case <-time.After(timeoutPeriod):
+		buf := make([]byte, 1<<20)
+		runtime.Stack(buf, true)
+		fmt.Println("", "Send - runtime stack: ", buf)
 		return nil, errTimeout
 	}
 }
@@ -433,8 +439,15 @@ func (h *Connection) SendMsg(m MSG, uuid, appData string) ([]string, error) {
 	case err = <-h.errReq:
 		return nil, err
 	case ev = <-h.cmd:
+		fmt.Println("SendMsg: rcvd event from cmd channel")
+		return ev, nil
+	case ev = <-h.api:
+		fmt.Println("SendMsg: rcvd event from api channel")
 		return ev, nil
 	case <-time.After(timeoutPeriod):
+		buf := make([]byte, 1<<20)
+		runtime.Stack(buf, true)
+		fmt.Println("", "SendMsg - runtime stack: ", buf)
 		return nil, errTimeout
 	}
 }
