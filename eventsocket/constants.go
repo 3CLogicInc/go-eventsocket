@@ -162,3 +162,5 @@ var MapKeyIndex = map[string]int{
 }
 
 const FsEventMapSize = 100
+
+const customHeaderPrefix = "Variable_sip_h_x"
