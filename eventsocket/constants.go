@@ -161,5 +161,7 @@ var MapKeyIndex = map[string]int{
 	"Milliseconds-Elapsed": MillisecondsElapsed,
 }
 
-const FsEventMapSize = 100
-const customHeaderPrefix = "Variable_sip_h_x"
+const (
+	FsEventMapSize     = 100
+	customHeaderPrefix = "Variable_sip_h_x"
+)

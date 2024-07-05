@@ -309,22 +309,26 @@ func copyHeaders(src *textproto.MIMEHeader, dst []string, decode bool) {
 	clen := len(customHeaderPrefix)
 	for k, v := range *src {
 		k = capitalize(k)
-		if decode && MapKeyIndex[k] != 0 {
-			dst[MapKeyIndex[k]], err = url.QueryUnescape(v[0])
-			if err != nil {
+		if decode {
+			if MapKeyIndex[k] != 0 {
+				dst[MapKeyIndex[k]], err = url.QueryUnescape(v[0])
+				if err != nil {
+					dst[MapKeyIndex[k]] = v[0]
+				}
+			} else if len(k) >= clen && k[0:clen] == customHeaderPrefix {
+				var headerValue string
+				headerValue, err = url.QueryUnescape(v[0])
+				if err != nil {
+					headerValue = v[0]
+				}
+				customHeaderValues = customHeaderValues + k + ":" + headerValue + "|"
+			}
+		} else {
+			if MapKeyIndex[k] != 0 {
 				dst[MapKeyIndex[k]] = v[0]
+			} else if len(k) >= clen && k[0:clen] == customHeaderPrefix {
+				customHeaderValues = customHeaderValues + k + ":" + v[0] + "|"
 			}
-		} else if MapKeyIndex[k] != 0 {
-			dst[MapKeyIndex[k]] = v[0]
-		} else if decode && len(k) >= clen && k[0:clen] == customHeaderPrefix {
-			var headerValue string
-			headerValue, err = url.QueryUnescape(v[0])
-			if err != nil {
-				headerValue = v[0]
-			}
-			customHeaderValues = customHeaderValues + k + ":" + headerValue + "|"
-		} else if len(k) >= clen && k[0:clen] == customHeaderPrefix {
-			customHeaderValues = customHeaderValues + k + ":" + v[0] + "|"
 		}
 	}
 
