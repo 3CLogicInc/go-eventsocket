@@ -304,31 +304,21 @@ func (h *Connection) ReadEvent() ([]string, error) {
 //
 // It's used after parsing plain text event headers, but not JSON.
 func copyHeaders(src *textproto.MIMEHeader, dst []string, decode bool) {
-	var err error
 	var customHeaderValues string
 	clen := len(customHeaderPrefix)
 	for k, v := range *src {
 		k = capitalize(k)
 		if decode {
-			if MapKeyIndex[k] != 0 {
-				dst[MapKeyIndex[k]], err = url.QueryUnescape(v[0])
-				if err != nil {
-					dst[MapKeyIndex[k]] = v[0]
-				}
-			} else if len(k) >= clen && k[0:clen] == customHeaderPrefix {
-				var headerValue string
-				headerValue, err = url.QueryUnescape(v[0])
-				if err != nil {
-					headerValue = v[0]
-				}
-				customHeaderValues = customHeaderValues + k + ":" + headerValue + "|"
+			escapedHeader, err := url.QueryUnescape(v[0])
+			if err == nil {
+				v[0] = escapedHeader
 			}
-		} else {
-			if MapKeyIndex[k] != 0 {
-				dst[MapKeyIndex[k]] = v[0]
-			} else if len(k) >= clen && k[0:clen] == customHeaderPrefix {
-				customHeaderValues = customHeaderValues + k + ":" + v[0] + "|"
-			}
+		}
+
+		if MapKeyIndex[k] != 0 {
+			dst[MapKeyIndex[k]] = v[0]
+		} else if len(k) >= clen && k[0:clen] == customHeaderPrefix {
+			customHeaderValues = customHeaderValues + k + ":" + v[0] + "|"
 		}
 	}
 
